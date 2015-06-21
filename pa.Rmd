@@ -5,7 +5,7 @@ date: "Sunday, June 21, 2015"
 output: html_document
 ---
 ```{r setup, echo = FALSE}
-knitr::opts_chunk$set(warning = FALSE, cache = TRUE)
+knitr::opts_chunk$set(warning = FALSE, cache = FALSE)
 ```
 
 ```{r addlibraries, echo = FALSE}
@@ -14,7 +14,7 @@ library(rattle)
 library(rpart.plot)
 ```
 
-This is the training data pull.  I've reduced the size of the training set to improve running time.  The full set takes a longer time to execute, but ulitimately, that will give better prediction results.
+This is the training data pull.  I've reduced the size of the training set to improve running time.  The full set takes a longer time to execute, but ulitimately, that will give better prediction results, but for demonstration purposes, a reduced training set still performs well.
 ```{r getTrainData, echo = TRUE}
 fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 download.file(fileURL, destfile = "train.csv", method = "curl")
@@ -58,7 +58,7 @@ featurePlot(training[yawCols], training$classe, "box")
 allCols <- c(rollCols, pitchCols, yawCols)
 ```
 
-After building the model, the results were not great with a little over 53% accuracy.  This model was not acceptable and it was hard to find other ways to improve the model.
+After building the model, the results were not great with a little over 47% accuracy.  This model was not acceptable and it was hard to find other ways to improve the model.
 ```{r firstModel, echo = TRUE}
 modFit1 <- train(training$classe ~ ., method = "rpart", data = training[, allCols])
 fancyRpartPlot(modFit1$finalModel)
@@ -94,8 +94,8 @@ modFitRF2 <- train(classe ~ .,
 modFitRF2
 ```
 
-Final test script below.
-```{r test, echo = TRUE, eval = FALSE}
+Final test script below.  The expected error rate is less than 10%.
+```{r test, echo = TRUE, eval = TRUE}
 fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 download.file(fileURL, destfile = "test.csv", method = "curl")
 testingRaw <- read.csv("test.csv", 
@@ -103,12 +103,12 @@ testingRaw <- read.csv("test.csv",
 testing <- testingRaw[, -removeCols]
 
 
-prediction <- predict(modFitRF, testing)
+prediction <- predict(modFitRF2, testing)
 
 ```
 
 Generate test file script.
-```{r submission, echo = FALSE, eval = FALSE}
+```{r submission, echo = TRUE, eval = TRUE}
 pml_write_files = function(x){
   n = length(x)
   for(i in 1:n){
