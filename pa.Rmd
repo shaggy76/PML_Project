@@ -1,0 +1,120 @@
+---
+title: "PML Course Project"
+author: "Scott Harrison"
+date: "Sunday, June 21, 2015"
+output: html_document
+---
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(warning = FALSE, cache = TRUE)
+```
+
+```{r addlibraries, echo = FALSE}
+library(caret)
+library(rattle)
+library(rpart.plot)
+```
+
+This is the training data pull.  I've reduced the size of the training set to improve running time.  The full set takes a longer time to execute, but ulitimately, that will give better prediction results.
+```{r getTrainData, echo = TRUE}
+fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(fileURL, destfile = "train.csv", method = "curl")
+trainingRaw <- read.csv("train.csv", 
+                        na.strings = c("NA", "#DIV/0!", " ", ""))
+#Reduce Sample Size
+set.seed(1028)
+sample <- sample(c(1:nrow(trainingRaw)),
+                 nrow(trainingRaw) / 10,
+                 replace = FALSE)
+
+trainingRaw <- trainingRaw[sample, ]
+```
+
+When cleaning the data set, I removed the first columns that have record descriptions and not actual measurement data.  I also removed columns where there were more than 75% NAs.  That is a somewhat arbitrary threshold, but it worked to give a decent model.
+```{r cleanData, echo = TRUE}
+col_NAs <- colSums(is.na(trainingRaw))
+NA_thresh <- 0.75
+removeCols <- c(1:7, unname(which(col_NAs > NA_thresh)))
+
+inTrain <- createDataPartition(trainingRaw$classe, 
+                               p = 0.75, 
+                               list = FALSE)
+
+training <- trainingRaw[inTrain, -removeCols]
+validate <- trainingRaw[-inTrain, -removeCols]
+```
+
+
+Originally, I did some exploratory data analysis and found columns that had good data.  These looked interesting.
+```{r plotVars, echo = TRUE}
+rollCols <- grep("^roll_", names(training))
+featurePlot(training[rollCols], training$classe, "box")
+
+pitchCols <- grep("^pitch_", names(training))
+featurePlot(training[pitchCols], training$classe, "box")
+
+yawCols <- grep("^yaw_", names(training))
+featurePlot(training[yawCols], training$classe, "box")
+
+allCols <- c(rollCols, pitchCols, yawCols)
+```
+
+After building the model, the results were not great with a little over 53% accuracy.  This model was not acceptable and it was hard to find other ways to improve the model.
+```{r firstModel, echo = TRUE}
+modFit1 <- train(training$classe ~ ., method = "rpart", data = training[, allCols])
+fancyRpartPlot(modFit1$finalModel)
+
+prediction <- predict(modFit1, validate[, allCols])
+confusionMatrix (prediction, validate$classe)
+```
+
+Random Forrests do the variable testing for us.  The data is broken into 75% training and 25% validate, which would correlate with a 60% training, 20% validate, and 20% testing.  In this case we have a smaller test set, but the validation set is a good way to test the random forrest model.  This model does much better.
+```{r rf1, echo = TRUE, eval = TRUE}
+modFitRF1 <- train(classe ~ ., 
+                  data = training, 
+                  method = "rf", 
+                  prox = TRUE,
+                  allowParallel = TRUE)
+
+modFitRF1
+prediction <- predict(modFitRF1, validate)
+confusionMatrix (prediction, validate$classe)
+```
+
+To improve on the above random forrest model, I created a new model on the entire training set.  This time I introduced cross validation by specifying that in the trainControl() settings.  This is the final model I used to evalute the actual test data.  It was not perfect, but much better than the first model I tried.
+```{r rf2, echo = TRUE, eval = TRUE}
+training <- trainingRaw[, -removeCols]
+ctrl <- trainControl(method = "cv", number = 3)
+modFitRF2 <- train(classe ~ ., 
+                  data = training, 
+                  method = "rf", 
+                  trControl = ctrl,
+                  prox = TRUE,
+                  allowParallel = TRUE)
+
+modFitRF2
+```
+
+Final test script below.
+```{r test, echo = TRUE, eval = FALSE}
+fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileURL, destfile = "test.csv", method = "curl")
+testingRaw <- read.csv("test.csv", 
+                       na.strings = c("NA", "#DIV/0!", " "))
+testing <- testingRaw[, -removeCols]
+
+
+prediction <- predict(modFitRF, testing)
+
+```
+
+Generate test file script.
+```{r submission, echo = FALSE, eval = FALSE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(prediction)
+```
